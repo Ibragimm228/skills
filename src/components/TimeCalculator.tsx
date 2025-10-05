@@ -27,6 +27,7 @@ export function TimeCalculator({ skills }: TimeCalculatorProps) {
   const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
   const [totalHours, setTotalHours] = useState(0);
   const [matchedSkills, setMatchedSkills] = useState<Skill[]>([]);
+  const [showAllSkills, setShowAllSkills] = useState(false);
 
 
   useEffect(() => {
@@ -36,11 +37,16 @@ export function TimeCalculator({ skills }: TimeCalculatorProps) {
     const getSmartSkillRecommendations = (availableHours: number, allSkills: Skill[]): Skill[] => {
       if (availableHours === 0) return [];
 
-      const quickWins = allSkills.filter(skill => skill.hours_required <= availableHours * 0.3);
-      const achievable = allSkills.filter(skill => 
+      const languageSkills = allSkills.filter(skill => skill.category === 'Языки');
+      const nonLanguageSkills = allSkills.filter(skill => skill.category !== 'Языки');
+      const availableLanguagesCount = Math.floor(availableHours / 300);
+      const selectedLanguages = languageSkills.slice(0, availableLanguagesCount);
+
+      const quickWins = nonLanguageSkills.filter(skill => skill.hours_required <= availableHours * 0.3);
+      const achievable = nonLanguageSkills.filter(skill => 
         skill.hours_required > availableHours * 0.3 && skill.hours_required <= availableHours
       );
-      const stretch = allSkills.filter(skill => 
+      const stretch = nonLanguageSkills.filter(skill => 
         skill.hours_required > availableHours && skill.hours_required <= availableHours * 1.5
       );
 
@@ -93,25 +99,25 @@ export function TimeCalculator({ skills }: TimeCalculatorProps) {
         }
       }
 
-      if (recommendations.length < 8) {
-        const remaining = allSkills
-          .filter(skill => !recommendations.find(r => r.id === skill.id))
-          .filter(skill => skill.hours_required <= availableHours * 2) 
-          .sort((a, b) => {
-            const aDistance = Math.abs(a.hours_required - availableHours);
-            const bDistance = Math.abs(b.hours_required - availableHours);
-            return aDistance - bDistance;
-          });
+      recommendations.push(...selectedLanguages);
 
-        const needed = 8 - recommendations.length;
-        recommendations.push(...remaining.slice(0, needed));
-      }
+      const remaining = nonLanguageSkills
+        .filter(skill => !recommendations.find(r => r.id === skill.id))
+        .filter(skill => skill.hours_required <= availableHours) 
+        .sort((a, b) => {
+          const aDistance = Math.abs(a.hours_required - availableHours);
+          const bDistance = Math.abs(b.hours_required - availableHours);
+          return aDistance - bDistance;
+        });
 
-      return recommendations.slice(0, 8); 
+      recommendations.push(...remaining);
+
+      return recommendations; 
     };
 
     const matched = getSmartSkillRecommendations(total, skills);
     setMatchedSkills(matched);
+
   }, [activities, skills]);
 
   const updateActivityHours = (index: number, hours: string) => {
@@ -279,39 +285,34 @@ export function TimeCalculator({ skills }: TimeCalculatorProps) {
                     <div className="text-xs sm:text-sm text-gray-600">Доступные навыки</div>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-3 sm:p-4 text-center">
-                    <div className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">{Math.floor(totalHours / 8) || 1}</div>
-                    <div className="text-xs sm:text-sm text-gray-600">Сессии обучения</div>
+                    <div className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">{Math.floor(totalHours / 300) || 0}</div>
+                    <div className="text-xs sm:text-sm text-gray-600">Доступные языки</div>
                   </div>
                 </div>
               )}
             </div>
             {matchedSkills.length > 0 ? (
               <div className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6 lg:p-8">
-                <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3">
-                  <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" />
-                  <span className="text-sm sm:text-base lg:text-xl">Рекомендуемые навыки для изучения</span>
-                </h3>
+                <div className="flex items-center justify-between mb-4 sm:mb-6">
+                  <h3 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center gap-2 sm:gap-3">
+                    <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" />
+                    <span className="text-sm sm:text-base lg:text-xl">Рекомендуемые навыки для изучения</span>
+                  </h3>
+                  
+                  {matchedSkills.length > 10 && (
+                    <button
+                      onClick={() => setShowAllSkills(!showAllSkills)}
+                      className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                    >
+                      {showAllSkills ? `Свернуть (${matchedSkills.length})` : `Показать все (${matchedSkills.length})`}
+                    </button>
+                  )}
+                </div>
                 
                 <div className="space-y-3 sm:space-y-4">
-                  {matchedSkills.map((skill) => {
+                  {(showAllSkills ? matchedSkills : matchedSkills.slice(0, 10)).map((skill) => {
                     const progress = Math.min((totalHours / skill.hours_required) * 100, 100);
-                    const isQuickWin = skill.hours_required <= totalHours * 0.3;
-                    const isAchievable = skill.hours_required > totalHours * 0.3 && skill.hours_required <= totalHours;
                     const isStretch = skill.hours_required > totalHours;
-                    
-                    let badgeColor = 'bg-blue-100 text-blue-700';
-                    let badgeText = 'Рекомендуется';
-                    
-                    if (isQuickWin) {
-                      badgeColor = 'bg-green-100 text-green-700';
-                      badgeText = 'Быстро';
-                    } else if (isAchievable) {
-                      badgeColor = 'bg-blue-100 text-blue-700';
-                      badgeText = 'Достижимо';
-                    } else if (isStretch) {
-                      badgeColor = 'bg-orange-100 text-orange-700';
-                      badgeText = 'Амбициозно';
-                    }
 
                     return (
                       <div
@@ -322,19 +323,11 @@ export function TimeCalculator({ skills }: TimeCalculatorProps) {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <div className="font-medium text-gray-900 text-sm sm:text-base truncate">{skill.name}</div>
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${badgeColor}`}>
-                                {badgeText}
-                              </span>
                             </div>
                             <div className="text-xs sm:text-sm text-gray-600">{skill.category} • {skill.difficulty_level}</div>
                           </div>
                           <div className="text-right flex-shrink-0">
                             <div className="font-bold text-blue-600 text-sm sm:text-base">{skill.hours_required}h</div>
-                            {progress >= 100 ? (
-                              <div className="text-xs text-green-600 font-medium">✓ Достаточно времени</div>
-                            ) : (
-                              <div className="text-xs text-gray-500">{progress.toFixed(0)}% покрытия</div>
-                            )}
                           </div>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2">
@@ -359,7 +352,10 @@ export function TimeCalculator({ skills }: TimeCalculatorProps) {
                 </div>
                 
               </div>
-            ) : totalHours > 0 ? (
+            ) : null}
+            
+            
+            {matchedSkills.length === 0 && totalHours > 0 ? (
               <div className="bg-white border border-gray-200 rounded-lg p-6 sm:p-8 text-center">
                 <AlertCircle className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">Добавьте больше времени</h3>
